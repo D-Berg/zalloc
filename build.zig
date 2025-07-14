@@ -5,24 +5,23 @@ const std = @import("std");
 // runner.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
-    const lib_mod = b.createModule(.{
+    const zalloc_mod = b.addModule("zalloc", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
     const lib = b.addLibrary(.{
+        .name = "zalloc",
         .linkage = .static,
-        .name = "infect_c",
-        .root_module = lib_mod,
+        .root_module = zalloc_mod,
     });
 
     b.installArtifact(lib);
 
     const lib_unit_tests = b.addTest(.{
-        .root_module = lib_mod,
+        .root_module = zalloc_mod,
     });
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
