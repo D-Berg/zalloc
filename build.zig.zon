@@ -2,7 +2,7 @@
     .name = .zalloc,
 
     .version = "0.0.1",
-    .fingerprint = 0x6d83ae232c97ddf2, // Changing this has security and trust implications.
+    .fingerprint = 0xb9caec8c495e95d6, // Changing this has security and trust implications.
 
     .minimum_zig_version = "0.14.1",
 
