@@ -11,14 +11,11 @@ pub var allocator: ?Allocator = null;
 var mutex: std.Thread.Mutex = .{};
 
 export fn zmalloc(size: usize) callconv(.c) ?*anyopaque {
-    log.debug("malloc got called ({d})", .{size});
-
     mutex.lock();
     defer mutex.unlock();
 
     if (allocator) |gpa| {
         if (gpa.alloc(u8, size + @sizeOf(usize))) |slice| {
-            log.debug("malloc allocated: {*}, {d}", .{ slice, slice.len });
             return getAnyopaque(slice, size);
         } else |err| {
             log.err("malloc: {s}", .{@errorName(err)});
@@ -31,8 +28,6 @@ export fn zrealloc(maybe_ptr: ?*anyopaque, new_size: usize) callconv(.c) ?*anyop
     mutex.lock();
     defer mutex.unlock();
 
-    log.debug("realloc got called ({*}, {d})", .{ maybe_ptr, new_size });
-
     if (allocator) |gpa| {
         if (maybe_ptr) |ptr| {
             if (gpa.realloc(getSlice(ptr), new_size + @sizeOf(usize))) |slice| {
@@ -42,7 +37,6 @@ export fn zrealloc(maybe_ptr: ?*anyopaque, new_size: usize) callconv(.c) ?*anyop
             }
         } else {
             if (gpa.alloc(u8, new_size + @sizeOf(usize))) |slice| {
-                log.debug("malloc allocated: {*}, {d}", .{ slice, slice.len });
                 return getAnyopaque(slice, new_size);
             } else |err| {
                 log.err("realloc: {s}", .{@errorName(err)});
@@ -73,11 +67,9 @@ export fn zfree(maybe_ptr: ?*anyopaque) callconv(.c) void {
     mutex.lock();
     defer mutex.unlock();
 
-    log.debug("you called my free: ({*})", .{maybe_ptr});
     if (allocator) |gpa| {
         if (maybe_ptr) |ptr| {
             const slice = getSlice(ptr);
-            log.debug("freeing: ({*}, {d})", .{ slice.ptr, slice.len });
             gpa.free(slice);
         }
     }
@@ -94,7 +86,6 @@ fn getSlice(ptr: *anyopaque) []u8 {
 /// sets the first 8 bytes of the slice to the size of the allocation
 fn getAnyopaque(slice: []u8, size: usize) *anyopaque {
     @memcpy(slice[0..@sizeOf(usize)], std.mem.toBytes(size)[0..]);
-    log.debug("realloc, allocated ({*}, {d})", .{ slice, slice.len });
     return slice.ptr + @sizeOf(usize);
 }
 
@@ -111,7 +102,7 @@ test "malloc and free" {
     string.len = 10;
     @memcpy(string[0..], "helloworld");
 
-    log.debug("{s}", .{string});
+    try std.testing.expectEqualStrings("helloworld", string);
 }
 
 test "realloc" {
