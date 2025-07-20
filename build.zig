@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
     });
 
     c_tests.root_module.addCSourceFiles(.{
+        .root = b.path("."),
         .files = &.{
             "tests/free.c",
             "tests/malloc.c",
