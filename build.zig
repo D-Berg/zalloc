@@ -1,8 +1,5 @@
 const std = @import("std");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -20,14 +17,41 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
-    const lib_unit_tests = b.addTest(.{
-        .root_module = zalloc_mod,
+    const c_tests = b.addLibrary(.{
+        .name = "test_free",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
     });
 
+    c_tests.root_module.addCSourceFiles(.{
+        .files = &.{
+            "tests/free.c",
+            "tests/malloc.c",
+            "tests/realloc.c",
+            "tests/calloc.c",
+            "tests/multithreading.c",
+        },
+    });
+    c_tests.addIncludePath(b.path("tests"));
+    infect(c_tests.root_module);
+
+    const lib_unit_tests = b.addTest(.{
+        .name = "tests",
+        .root_module = zalloc_mod,
+    });
+    lib_unit_tests.linkLibrary(c_tests);
+
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+    const install_test_runner = b.addInstallArtifact(lib_unit_tests, .{});
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_lib_unit_tests.step);
+
+    const install_test_step = b.step("install-tests", "install test runner");
+    install_test_step.dependOn(&install_test_runner.step);
 }
 
 pub fn infect(mod: *std.Build.Module) void {
