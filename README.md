@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) !void {
 
     // this overwrites malloc, calloc, realloc and free in 
     // all c source files in the c module and will only affect that module.
-    zalloc.infect(your_c_mod);
+    zalloc.infect(md4c_mod);
 
     // import the and link zalloc to your exe
     exe_mod.addImport("zalloc", zalloc_dep.module("zalloc"));
@@ -61,7 +61,7 @@ pub fn main() !void {
 
     // ...
 
-    // now md4c will use the zigs debug allocator.
+    // now md4c will use zigs debug allocator.
     const rc = md4c.md_html(
         markdown.ptr,
         @intCast(markdown.len),
