@@ -36,14 +36,14 @@ pub fn build(b: *std.Build) void {
             "tests/multithreading.c",
         },
     });
-    c_tests.addIncludePath(b.path("tests"));
+    c_tests.root_module.addIncludePath(b.path("tests"));
     infect(c_tests.root_module);
 
     const lib_unit_tests = b.addTest(.{
         .name = "tests",
         .root_module = zalloc_mod,
     });
-    lib_unit_tests.linkLibrary(c_tests);
+    lib_unit_tests.root_module.linkLibrary(c_tests);
 
     const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
     const install_test_runner = b.addInstallArtifact(lib_unit_tests, .{});
