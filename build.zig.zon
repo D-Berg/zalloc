@@ -1,7 +1,7 @@
 .{
     .name = .zalloc,
 
-    .version = "0.0.1",
+    .version = "0.1.0",
     .fingerprint = 0xb9caec8c495e95d6, // Changing this has security and trust implications.
 
     .minimum_zig_version = "0.14.1",
