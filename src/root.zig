@@ -8,13 +8,14 @@ pub const std_options: std.Options = .{
 };
 const log = std.log.scoped(.zalloc);
 
+pub var io: ?std.Io = null;
 pub var allocator: ?Allocator = null;
 
-var mutex: std.Thread.Mutex = .{};
+var mutex: std.Io.Mutex = .init;
 
 export fn zmalloc(size: usize) callconv(.c) ?[*]u8 {
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(io.?) catch return null;
+    defer mutex.unlock(io.?);
 
     if (allocator) |gpa| {
         if (gpa.alloc(u8, size + @sizeOf(usize))) |slice| {
@@ -27,8 +28,8 @@ export fn zmalloc(size: usize) callconv(.c) ?[*]u8 {
 }
 
 export fn zrealloc(maybe_ptr: ?[*]u8, new_size: usize) callconv(.c) ?[*]u8 {
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(io.?) catch return null;
+    defer mutex.unlock(io.?);
 
     if (allocator) |gpa| {
         if (maybe_ptr) |ptr| {
@@ -50,8 +51,8 @@ export fn zrealloc(maybe_ptr: ?[*]u8, new_size: usize) callconv(.c) ?[*]u8 {
 }
 
 export fn zcalloc(num: usize, size: usize) callconv(.c) ?[*]u8 {
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(io.?) catch return null;
+    defer mutex.unlock(io.?);
 
     if (allocator) |gpa| {
         if (gpa.alloc(u8, num * size + @sizeOf(usize))) |slice| {
@@ -66,8 +67,8 @@ export fn zcalloc(num: usize, size: usize) callconv(.c) ?[*]u8 {
 }
 
 export fn zfree(maybe_ptr: ?[*]u8) callconv(.c) void {
-    mutex.lock();
-    defer mutex.unlock();
+    mutex.lock(io.?) catch return;
+    defer mutex.unlock(io.?);
 
     if (allocator) |gpa| {
         if (maybe_ptr) |ptr| {

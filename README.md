@@ -44,20 +44,12 @@ pub fn build(b: *std.Build) !void {
 
 const zalloc = @import("zalloc");
 
-pub fn main() !void {
-
-    // choose a zig allocator
-    var debug_allocator: std.heap.DebugAllocator(.{
-        .verbose_log = true, // logs allocations and frees, just to show that zalloc actually does something
-    }) = .init;
-    defer _ = debug_allocator.deinit(); 
-
-    const gpa = debug_allocator.allocator();
-
+pub fn main(init: std.Io.Init) !void {
     // Specify which allocator the c library will use
     // DO this before calling any of the c functions.
     // Forgetting this will lead to allocations returning null.
-    zalloc.allocator = gpa;
+    zalloc.allocator = init.gpa;
+    zalloc.io = init.io;
 
     // ...
 
