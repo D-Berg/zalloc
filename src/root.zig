@@ -96,6 +96,7 @@ fn getPtr(slice: []u8, size: usize) [*]u8 {
 }
 
 test "malloc and free" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
 
     const ptr = zmalloc(10) orelse return error.NullPtr;
@@ -112,6 +113,7 @@ test "malloc and free" {
 test "realloc" {
     // std.testing.log_level = .debug;
     allocator = std.testing.allocator;
+    io = std.testing.io;
     const ptr = zmalloc(10) orelse return error.NullPtr;
 
     const realloc_ptr = zrealloc(ptr, 20) orelse return error.NullPtr;
@@ -133,6 +135,7 @@ fn testMallocAndFree(id: u8) !void {
 test "multithreading" {
     // std.testing.log_level = .debug;
     const test_allocator = std.testing.allocator;
+    io = std.testing.io;
     allocator = test_allocator;
     var threads: [10]std.Thread = undefined;
 
@@ -150,30 +153,35 @@ test "multithreading" {
 }
 
 test "c free" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
     const test_free = @extern(*const fn () callconv(.c) c_int, .{ .name = "test_free" });
     try std.testing.expectEqual(0, test_free());
 }
 
 test "c malloc" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
     const test_malloc = @extern(*const fn () callconv(.c) c_int, .{ .name = "test_malloc" });
     try std.testing.expectEqual(0, test_malloc());
 }
 
 test "c realloc" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
     const test_realloc = @extern(*const fn () callconv(.c) c_int, .{ .name = "test_realloc" });
     try std.testing.expectEqual(0, test_realloc());
 }
 
 test "c calloc" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
     const test_calloc = @extern(*const fn () callconv(.c) c_int, .{ .name = "test_calloc" });
     try std.testing.expectEqual(0, test_calloc());
 }
 
 test "c threads" {
+    io = std.testing.io;
     allocator = std.testing.allocator;
     const test_threading = @extern(*const fn (n_threds: c_int) callconv(.c) c_int, .{ .name = "test_threading" });
     try std.testing.expectEqual(0, test_threading(4));
