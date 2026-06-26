@@ -1,6 +1,9 @@
 # Zalloc
 
 Replace malloc, calloc, realloc and free in a c module with a zig allocator. 
+Usefull in order to use zigs debug allocator when interacting with C code to check for memory leaks,
+double frees and all its features. In Release modes it is probably just unnecessary if you pass it 
+the gpa from juice main.
 
 ## Usage
 
