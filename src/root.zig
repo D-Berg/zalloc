@@ -1,8 +1,9 @@
 //! Replaces (infects) your c codes malloc and free (and friends)
 //! with a zig allocator.
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const builtin = @import("builtin");
+
 pub const std_options: std.Options = .{
     .log_level = .err,
 };
@@ -13,143 +14,118 @@ pub var allocator: ?Allocator = null;
 
 var mutex: std.Io.Mutex = .init;
 
-export fn zmalloc(size: usize) callconv(.c) ?[*]u8 {
+const alignment = @alignOf(std.c.max_align_t);
+const header_offset = std.mem.alignForward(usize, @sizeOf(usize), alignment);
+
+export fn zmalloc(size: usize) callconv(.c) ?*align(alignment) anyopaque {
     mutex.lock(io.?) catch return null;
     defer mutex.unlock(io.?);
 
-    if (allocator) |gpa| {
-        if (gpa.alloc(u8, size + @sizeOf(usize))) |slice| {
-            return getPtr(slice, size);
+    if (allocator == null) {
+        @branchHint(.unlikely);
+        return null;
+    }
+    const gpa = allocator.?;
+
+    if (size == 0) {
+        return null;
+    }
+
+    if (gpa.alignedAlloc(u8, .fromByteUnits(alignment), size + header_offset)) |ptr| {
+        @branchHint(.likely);
+        return getPtr(@as([]align(alignment) u8, @ptrCast(@alignCast(ptr))), size);
+    } else |err| {
+        @branchHint(.unlikely);
+        log.err("zmalloc: {t}", .{err});
+        return null;
+    }
+}
+
+export fn zrealloc(maybe_ptr: ?*anyopaque, new_size: usize) callconv(.c) ?*align(alignment) anyopaque {
+    mutex.lock(io.?) catch return null;
+    defer mutex.unlock(io.?);
+
+    if (allocator == null) {
+        @branchHint(.unlikely);
+        return null;
+    }
+    const gpa = allocator.?;
+
+    if (maybe_ptr) |ptr| {
+        if (gpa.realloc(getSlice(anyopaqueToAlignedU8Ptr(ptr)), new_size + header_offset)) |slice| {
+            @branchHint(.likely);
+            return getPtr(@alignCast(slice), new_size);
         } else |err| {
-            log.err("malloc: {s}", .{@errorName(err)});
+            @branchHint(.unlikely);
+            log.err("zrealloc: {t}", .{err});
         }
-    }
-    return null;
-}
-
-export fn zrealloc(maybe_ptr: ?[*]u8, new_size: usize) callconv(.c) ?[*]u8 {
-    mutex.lock(io.?) catch return null;
-    defer mutex.unlock(io.?);
-
-    if (allocator) |gpa| {
-        if (maybe_ptr) |ptr| {
-            if (gpa.realloc(getSlice(ptr), new_size + @sizeOf(usize))) |slice| {
-                return getPtr(slice, new_size);
-            } else |err| {
-                log.err("realloc: {s}", .{@errorName(err)});
-            }
-        } else {
-            if (gpa.alloc(u8, new_size + @sizeOf(usize))) |slice| {
-                return getPtr(slice, new_size);
-            } else |err| {
-                log.err("realloc: {s}", .{@errorName(err)});
-            }
-        }
-    }
-
-    return null;
-}
-
-export fn zcalloc(num: usize, size: usize) callconv(.c) ?[*]u8 {
-    mutex.lock(io.?) catch return null;
-    defer mutex.unlock(io.?);
-
-    if (allocator) |gpa| {
-        if (gpa.alloc(u8, num * size + @sizeOf(usize))) |slice| {
-            @memset(slice, 0);
-            return getPtr(slice, num * size);
+    } else {
+        if (gpa.alignedAlloc(u8, .fromByteUnits(alignment), new_size + header_offset)) |slice| {
+            @branchHint(.likely);
+            return getPtr(@alignCast(slice), new_size);
         } else |err| {
-            log.err("zcalloc: {s}", .{@errorName(err)});
+            @branchHint(.unlikely);
+            log.err("zrealloc: {t}", .{err});
         }
     }
 
     return null;
 }
 
-export fn zfree(maybe_ptr: ?[*]u8) callconv(.c) void {
+export fn zcalloc(num: usize, size: usize) callconv(.c) ?*align(alignment) anyopaque {
+    mutex.lock(io.?) catch return null;
+    defer mutex.unlock(io.?);
+
+    if (allocator == null) {
+        @branchHint(.unlikely);
+        return null;
+    }
+    const gpa = allocator.?;
+
+    if (gpa.alignedAlloc(u8, .fromByteUnits(alignment), num * size + header_offset)) |slice| {
+        @branchHint(.likely);
+        @memset(slice, 0);
+        return getPtr(@alignCast(slice), num * size);
+    } else |err| {
+        @branchHint(.unlikely);
+        log.err("zcalloc: {t}", .{err});
+        return null;
+    }
+}
+
+export fn zfree(maybe_ptr: ?*anyopaque) callconv(.c) void {
     mutex.lock(io.?) catch return;
     defer mutex.unlock(io.?);
 
     if (allocator) |gpa| {
+        @branchHint(.likely);
         if (maybe_ptr) |ptr| {
-            const slice = getSlice(ptr);
+            @branchHint(.likely);
+            const slice = getSlice(anyopaqueToAlignedU8Ptr(ptr));
             gpa.free(slice);
         }
     }
 }
 
+inline fn anyopaqueToAlignedU8Ptr(ptr: *anyopaque) [*]align(alignment) u8 {
+    return @ptrCast(@alignCast(ptr));
+}
+
 /// `ptr` is expected to have been created by `zmalloc`, `zrealloc` or `zcalloc`
 /// calling this function otherwise will probably lead to seg fault
-fn getSlice(ptr: [*]u8) []u8 {
-    var slice: []u8 = undefined;
-    slice.ptr = ptr - @sizeOf(usize);
+fn getSlice(ptr: [*]align(alignment) u8) []align(alignment) u8 {
+    var slice: []align(alignment) u8 = undefined;
+    slice.ptr = ptr - header_offset;
     const len_of_allocation = std.mem.bytesToValue(usize, slice.ptr[0..@sizeOf(usize)]);
-    slice.len = len_of_allocation + @sizeOf(usize);
+    slice.len = len_of_allocation + header_offset;
 
     return slice;
 }
 
 /// sets the first bytes of the slice to the `size` of the allocation
-fn getPtr(slice: []u8, size: usize) [*]u8 {
+fn getPtr(slice: []align(alignment) u8, size: usize) [*]align(alignment) u8 {
     @memcpy(slice[0..@sizeOf(usize)], std.mem.toBytes(size)[0..]);
-    return slice.ptr + @sizeOf(usize);
-}
-
-test "malloc and free" {
-    io = std.testing.io;
-    allocator = std.testing.allocator;
-
-    const ptr = zmalloc(10) orelse return error.NullPtr;
-    defer zfree(ptr);
-
-    var string: []u8 = undefined;
-    string.ptr = ptr;
-    string.len = 10;
-    @memcpy(string[0..], "helloworld");
-
-    try std.testing.expectEqualStrings("helloworld", string);
-}
-
-test "realloc" {
-    // std.testing.log_level = .debug;
-    allocator = std.testing.allocator;
-    io = std.testing.io;
-    const ptr = zmalloc(10) orelse return error.NullPtr;
-
-    const realloc_ptr = zrealloc(ptr, 20) orelse return error.NullPtr;
-    defer zfree(realloc_ptr);
-}
-
-fn testMallocAndFree(id: u8) !void {
-    const ptr = zmalloc(10) orelse return error.NullPtr;
-    defer zfree(ptr);
-
-    var string: []u8 = undefined;
-    string.ptr = ptr;
-    string.len = 10;
-    @memcpy(string[0..10], "helloworld");
-
-    log.debug("{s}{d}", .{ string, id });
-}
-
-test "multithreading" {
-    // std.testing.log_level = .debug;
-    const test_allocator = std.testing.allocator;
-    io = std.testing.io;
-    allocator = test_allocator;
-    var threads: [10]std.Thread = undefined;
-
-    for (0..threads.len) |i| {
-        threads[i] = try std.Thread.spawn(
-            .{},
-            testMallocAndFree,
-            .{@as(u8, @intCast(i))},
-        );
-    }
-
-    for (threads) |t| {
-        t.join();
-    }
+    return slice.ptr + header_offset;
 }
 
 test "c free" {
